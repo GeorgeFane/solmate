@@ -181,3 +181,31 @@ abstract contract ERC4626 is ERC20 {
 
     function afterDeposit(uint256 assets, uint256 shares) internal virtual {}
 }
+
+contract Vault is ERC4626 {
+    address constant USDC_ADDRESS = 0xDA0bab807633f07f013f94DD0E6A4F96F8742B53;
+    ERC20 constant USDC_CONTRACT = ERC20(USDC_ADDRESS);
+
+    constructor() ERC4626(USDC_CONTRACT, "Vault Shares", "VASH") {}
+
+    function totalAssets() public view override returns (uint256) {
+        return USDC_CONTRACT.balanceOf(address(this));
+    }
+}
+
+contract MintableERC20 is ERC20("USD Coin", "USDC", 6) {
+    function mint() public {
+        uint amount = 1_000_000;
+        address to = msg.sender;
+
+        totalSupply += amount;
+
+        // Cannot overflow because the sum of all user
+        // balances can't exceed the max uint256 value.
+        unchecked {
+            balanceOf[to] += amount;
+        }
+
+        emit Transfer(address(0), to, amount);
+    }
+}
