@@ -5,6 +5,8 @@ import {ERC20} from "../tokens/ERC20.sol";
 import {SafeTransferLib} from "../utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "../utils/FixedPointMathLib.sol";
 
+import {Pool} from "https://github.com/aave/aave-v3-core/blob/master/contracts/protocol/pool/Pool.sol";
+
 /// @notice Minimal ERC4626 tokenized Vault implementation.
 /// @author Solmate (https://github.com/Rari-Capital/solmate/blob/main/src/mixins/ERC4626.sol)
 abstract contract ERC4626 is ERC20 {
@@ -183,13 +185,74 @@ abstract contract ERC4626 is ERC20 {
 }
 
 contract Vault is ERC4626 {
-    address constant USDC_ADDRESS = 0xDA0bab807633f07f013f94DD0E6A4F96F8742B53;
+
+    // CONSTANTS
+    address constant MY_ACCOUNT = 0xc59E499d8E789986A08547ae5294D14C5dd91D9f;
+
+    address constant USDC_ADDRESS = 0x02444D214962eC73ab733bB00Ca98879efAAa73d;
     ERC20 constant USDC_CONTRACT = ERC20(USDC_ADDRESS);
+
+    address constant AAVE_POOL_ADDRESS = 0xC4744c984975ab7d41e0dF4B37E048Ef8006115E;
+    Pool constant AAVE_POOL = Pool(AAVE_POOL_ADDRESS);
+
+    // FUNCTIONS
 
     constructor() ERC4626(USDC_CONTRACT, "Vault Shares", "VASH") {}
 
-    function totalAssets() public view override returns (uint256) {
+    // ~20% of deposited USDC held in vault
+    function reserve_assets() public view returns (uint256) {
         return USDC_CONTRACT.balanceOf(address(this));
+    }
+
+    // ~80% of deposited USDC supplied to AAVE
+    function collateral_assets() public view returns (uint256) {
+        (
+            uint256 totalCollateralBase,
+            uint256 totalDebtBase,
+            uint256 availableBorrowsBase,
+            uint256 currentLiquidationThreshold,
+            uint256 ltv,
+            uint256 healthFactor
+        ) = AAVE_POOL.getUserAccountData(address(this));
+
+        return totalCollateralBase / 100;
+    }
+
+    function totalAssets() public view override returns (uint256) {
+        return reserve_assets() + collateral_assets();
+    }
+
+    function check_ratio() internal {
+
+        uint current_reserve = reserve_assets();
+        uint collateral_base = collateral_assets();
+        uint total_usdc = totalAssets();
+
+        uint percent_reserve = current_reserve * 100 / total_usdc;
+
+        // want reserve ratio to be 20%
+        uint desired_reserve = total_usdc / 5;
+        if (percent_reserve < 15) {
+            uint withdraw_amount = desired_reserve - current_reserve;
+            AAVE_POOL.withdraw(USDC_ADDRESS, withdraw_amount, address(this));
+        }
+        else if (percent_reserve > 25) {
+            uint deposit_amount = current_reserve - desired_reserve;
+            USDC_CONTRACT.approve(AAVE_POOL_ADDRESS, deposit_amount);
+            AAVE_POOL.supply(USDC_ADDRESS, deposit_amount, address(this), 0);
+        }
+    }
+
+    function deposit(uint assets) public {
+        deposit(assets, msg.sender);
+
+        check_ratio();
+    }
+
+    function withdraw(uint assets) public {
+        withdraw(assets, msg.sender, msg.sender);
+
+        check_ratio();
     }
 }
 
