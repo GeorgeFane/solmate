@@ -17,12 +17,15 @@ contract ArborVault is ERC4626 {
     //////////////////////////////////////////////////////////////*/
 
     address constant USDC_ADDRESS = 0x02444D214962eC73ab733bB00Ca98879efAAa73d;
-    ERC20 constant USDC_CONTRACT = ERC20(USDC_ADDRESS);
+    // ERC20 constant USDC_CONTRACT = ERC20(USDC_ADDRESS);
+    ERC20 immutable USDC_CONTRACT;
 
     address constant AAVE_POOL_ADDRESS = 0xC4744c984975ab7d41e0dF4B37E048Ef8006115E;
     Pool constant AAVE_POOL = Pool(AAVE_POOL_ADDRESS);
 
-    constructor() ERC4626(USDC_CONTRACT, "Mock Token Vault", "vwTKN") {}
+    constructor(ERC20 underlying) ERC4626(underlying, "Mock Token Vault", "vwTKN") {
+        USDC_CONTRACT = underlying;
+    }
 
     /*//////////////////////////////////////////////////////////////
                             ACCOUNTING LOGIC
@@ -69,7 +72,6 @@ contract ArborVault is ERC4626 {
     function check_ratio() internal {
 
         uint current_reserve = reserve_assets();
-        uint collateral_base = collateral_assets();
         uint total_usdc = totalAssets();
 
         uint percent_reserve = current_reserve * 100 / total_usdc;

@@ -19,8 +19,13 @@ contract ArborVaultTest is DSTest {
     MockArborVault vault;
 
     function setUp() public {
+        // underlying = MockERC20(USDC_ADDRESS);
         underlying = new MockERC20("USD Coin", "USDC", 6);
-        vault = new MockArborVault();
+        vault = new MockArborVault(underlying);
+    }
+
+    constructor() {
+        setUp();
     }
 
     function invariantMetadata() public {
@@ -29,12 +34,12 @@ contract ArborVaultTest is DSTest {
         assertEq(vault.decimals(), 6, "Invariant decimals");
     }
 
-    function testMetadata(string calldata name, string calldata symbol) public {
-        MockArborVault vlt = new MockArborVault();
-        assertEq(vlt.name(), name, "Metadata name");
-        assertEq(vlt.symbol(), symbol, "Metadata symbol");
-        assertEq(address(vlt.asset()), address(underlying), "Metadata asset");
-    }
+    // function testMetadata(string calldata name, string calldata symbol) public {
+    //     MockArborVault vlt = new MockArborVault();
+    //     assertEq(vlt.name(), name, "Metadata name");
+    //     assertEq(vlt.symbol(), symbol, "Metadata symbol");
+    //     assertEq(address(vlt.asset()), address(underlying), "Metadata asset");
+    // }
 
     function testMaxDeposit() public {
         Person alice = new Person();
@@ -53,7 +58,7 @@ contract ArborVaultTest is DSTest {
         // 3 situations:
         // 1. 1 share = 1 USDC when 0 USDC deposited in Vault
         // 2. 1 share = 1 USDC when some USDC deposited in Vault
-        // 3, 1 share = 2 USDC when some USDC deposited in Vault
+        // 3. 1 share = 2 USDC when some USDC deposited in Vault
 
         // Situation 1
         Person alice = new Person();
@@ -69,7 +74,8 @@ contract ArborVaultTest is DSTest {
 
         // Situation 2
         underlying.mint(address(vault), 1);
-        vault.mint(1, address(vault));
+        vault.mintToSelf(1);
+        // Now there is 1 vault share and 1 deposited USDC
         assertEq(vault.convertToAssets(1), 1, "testMaxMint: 1 share = 1 USDC");
 
         assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 0: 1 share = 1 USDC");
@@ -79,5 +85,22 @@ contract ArborVaultTest is DSTest {
 
         underlying.burn(aliceAddress, 1);
         assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint after burn: 1 share = 1 USDC");
+
+        // Situation 3
+        underlying.mint(address(vault), 1);
+        // Now there is 1 vault share and 2 deposited USDC
+        assertEq(vault.convertToAssets(1), 2, "testMaxMint: 1 share = 2 USDC");
+
+        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 0: 1 share = 2 USDC");
+
+        underlying.mint(aliceAddress, 2);
+        assertEq(vault.maxMint(aliceAddress), 1, "testMaxMint after mint: 1 share = 2 USDC");
+
+        underlying.burn(aliceAddress, 1);
+        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint after burn: 1 share = 2 USDC");
+
+        // Cleanup
+        underlying.burn(address(vault), 2);
+        vault.burn(1);
     }
 }
