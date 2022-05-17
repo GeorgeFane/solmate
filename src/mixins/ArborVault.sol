@@ -1,3 +1,10 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity >=0.8.0;
+
+import {ERC20} from "../tokens/ERC20.sol";
+import {SafeTransferLib} from "../utils/SafeTransferLib.sol";
+import {FixedPointMathLib} from "../utils/FixedPointMathLib.sol";
+
 import {ERC4626} from "./ERC4626.sol";
 import {Pool} from "https://github.com/aave/aave-v3-core/blob/master/contracts/protocol/pool/Pool.sol";
 
@@ -15,7 +22,7 @@ contract ArborVault is ERC4626 {
     address constant AAVE_POOL_ADDRESS = 0xC4744c984975ab7d41e0dF4B37E048Ef8006115E;
     Pool constant AAVE_POOL = Pool(AAVE_POOL_ADDRESS);
 
-    constructor() ERC4626(USDC_CONTRACT, "Vault Shares", "VASH") {}
+    constructor() ERC4626(USDC_CONTRACT, "Mock Token Vault", "vwTKN") {}
 
     /*//////////////////////////////////////////////////////////////
                             ACCOUNTING LOGIC
@@ -71,12 +78,12 @@ contract ArborVault is ERC4626 {
         uint desired_reserve = total_usdc / 5;
         if (percent_reserve < 15) {
             uint withdraw_amount = desired_reserve - current_reserve;
-            AAVE_POOL.withdraw(USDC_ADDRESS, withdraw_amount, address(this));
+            AAVE_POOL.withdraw(address(USDC_CONTRACT), withdraw_amount, address(this));
         }
         else if (percent_reserve > 25) {
             uint deposit_amount = current_reserve - desired_reserve;
             USDC_CONTRACT.approve(AAVE_POOL_ADDRESS, deposit_amount);
-            AAVE_POOL.supply(USDC_ADDRESS, deposit_amount, address(this), 0);
+            AAVE_POOL.supply(address(USDC_CONTRACT), deposit_amount, address(this), 0);
         }
     }
 
@@ -106,7 +113,7 @@ contract ArborVault is ERC4626 {
         return convertToShares(maxDeposit(owner));
     }
 
-    function min(uint x, uint y) internal view returns (uint) {
+    function min(uint x, uint y) internal pure returns (uint) {
         return x < y ? x : y;
     }
 
