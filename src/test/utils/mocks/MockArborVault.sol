@@ -22,8 +22,8 @@ contract MockArborVault is ArborVault {
         _mint(owner, amount);
     }
 
-    function burnShares(uint256 amount) public {
-        _burn(address(this), amount);
+    function burnShares(address owner, uint256 amount) public {
+        _burn(owner, amount);
     }
 
     function burnUsdc(uint256 amount) public {

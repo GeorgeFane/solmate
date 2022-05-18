@@ -15,8 +15,8 @@ contract Person {
     address constant USDC_ADDRESS = 0x02444D214962eC73ab733bB00Ca98879efAAa73d;
 
     // _burn is internal, so I can't call it
-    function burn(address erc20_address, uint256 amount) public {
-        MockERC20(erc20_address).transfer(USDC_ADDRESS, amount);
+    function burnUsdc(uint256 amount) public {
+        MockERC20(USDC_ADDRESS).transfer(USDC_ADDRESS, amount);
     }
 }
 
@@ -63,66 +63,64 @@ contract ArborVaultTest is DSTest {
         underlying.mint(aliceAddress, 1);
         assertEq(vault.maxDeposit(aliceAddress), 1, "testMaxDeposit 1");
 
-        alice.burn(USDC_ADDRESS, 1);
+        alice.burnUsdc(1);
         assertEq(vault.maxDeposit(aliceAddress), 0, "testMaxDeposit 2");
     }
     // maxMint() is convertToShares(maxDeposit()),
     // and convertToShares is provided by solmate,
     // so no need to test maxMint()
 
-    // 11 logs: all Transfer events
-    // function testMaxMint() public {
-    //     // 3 situations:
-    //     // 1. 1 share = 1 USDC when 0 USDC deposited in Vault
-    //     // 2. 1 share = 1 USDC when some USDC deposited in Vault
-    //     // 3. 1 share = 2 USDC when some USDC deposited in Vault
+    // 2 logs: Transfer events for mint and burn
+    function testMaxMint() public {
+        // 2 situations:
+        // 1. Vault and AAVE both empty, 1 USDC = 1 share
+        // 2. Vault and AAVE not empty, 1 USDC = 1 share
+        // 2. Vault and AAVE not empty, 2 USDC = 1 share
 
-    //     // Situation 1
-    //     Person alice = new Person();
-    //     address aliceAddress = address(alice);
+        Person alice = new Person();
+        address aliceAddress = address(alice);
 
-    //     assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 1.0");
+        // Situation 1
+        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 1.0");
 
-    //     underlying.mint(aliceAddress, 1);
-    //     assertEq(vault.maxMint(aliceAddress), 1, "testMaxMint 1.1");
+        underlying.mint(aliceAddress, 1);
+        assertEq(vault.maxMint(aliceAddress), 1, "testMaxMint 1.1");
 
-    //     alice.burn(USDC_ADDRESS, 1);
-    //     assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 1.2");
+        alice.burnUsdc(1);
+        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 1.2");
 
-    //     // Situation 2
-    //     underlying.mint(aliceAddress, 1);
-    //     vault.mintFreeShares(aliceAddress, 1);
-    //     // Now there is 1 vault share and 1 deposited USDC
-    //     assertEq(vault.convertToAssets(1), 1, "testMaxMint 2.");
+        // Situation 2
+        underlying.mint(address(vault), 1);
+        vault.mintFreeShares(aliceAddress, 1);
 
-    //     assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 2.0");
+        assertEq(vault.totalAssets(), 1, "testMaxMint totalAssets");
+        assertEq(vault.totalSupply(), 1, "testMaxMint totalSupply");
 
-    //     underlying.mint(aliceAddress, 1);
-    //     assertEq(vault.maxMint(aliceAddress), 1, "testMaxMint 2.1");
+        assertEq(vault.convertToShares(1), 1, "testMaxMint 2.");
 
-    //     alice.burn(USDC_ADDRESS, 1);
-    //     assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 2.2");
+        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 2.0");
 
-    //     // Situation 3
-    //     underlying.mint(address(vault), 1);
-    //     // Now there is 1 vault share and 2 deposited USDC
-    //     assertEq(vault.convertToAssets(1), 2, "testMaxMint: 3.");
+        underlying.mint(aliceAddress, 1);
+        // alice has 1 USDC
+        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 2.1");
 
-    //     assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 3.0");
+        underlying.mint(aliceAddress, 1);
+        // alice has 2 USDC
+        assertEq(vault.maxMint(aliceAddress), 1, "testMaxMint 2.2");
 
-    //     underlying.mint(aliceAddress, 2);
-    //     assertEq(vault.maxMint(aliceAddress), 1, "testMaxMint 3.1");
+        // Cleanup
+        alice.burnUsdc(2);
+        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 2.3");
 
-    //     alice.burn(USDC_ADDRESS, 1);
-    //     assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 3.2");
+        vault.burnShares(aliceAddress, 1);
+        vault.burnUsdc(2);
 
-    //     // Cleanup
-    //     vault.burnUsdc(2);
-    //     alice.burn(address(vault), 1);
-    // }
-
-    // checkRatio is only called by deposit and withdraw,
-    // so reserve ratio may be off
+        assertEq(vault.totalAssets(), 0, "testMaxMint totalAssets");
+        assertEq(vault.totalSupply(), 0, "testMaxMint totalSupply");
+    }
+    // maxMint() is convertToShares(maxDeposit()),
+    // and convertToShares is provided by solmate,
+    // so no need to test maxMint()
 
     // 17 logs
     function testReserveAssets() public {
@@ -229,10 +227,156 @@ contract ArborVaultTest is DSTest {
         vault.withdrawFromAave(8);
         vault.burnUsdc(10);
 
-        alice.burn(address(vault), 9);
-        bob.burn(address(vault), 1);
+        vault.burnShares(aliceAddress, 9);
+        vault.burnShares(bobAddress, 1);
     }
     // maxWithdraw() is convertToAssets(maxRedeem()),
     // and convertToAssets is provided by solmate,
     // so no need to test maxWithdraw()
+
+    // 66 logs
+    function testCheckRatio() public {
+        // 5 situations:
+        // 1. Vault and AAVE are empty
+        // 2. Vault has USDC, AAVE is empty
+        // 3. Vault is empty, AAVE is not
+        // 4. Neither are empty, new deposit to vault
+        // 5. Test checkRatio behavior when ratio is 20%
+        // 6. 15%
+        // 7. 14%
+        // 8. 25%
+        // 9. 26%
+
+        // Situation 1
+        assertEq(vault.reserveAssets(), 0, "testCheckRatio 1.0");
+        assertEq(vault.totalAssets(), 0, "testCheckRatio 1.1");
+
+        vault.checkRatio();
+
+        assertEq(vault.reserveAssets(), 0, "testCheckRatio 1.2");
+        assertEq(vault.totalAssets(), 0, "testCheckRatio 1.3");
+
+        // Situation 2
+        underlying.mint(address(vault), 100);
+
+        assertEq(vault.reserveAssets(), 100, "testCheckRatio 2.0");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 2.1");
+
+        vault.checkRatio();
+
+        assertEq(vault.reserveAssets(), 20, "testCheckRatio 2.2");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 2.3");
+
+        // Situation 3
+        vault.burnUsdc(20);
+
+        assertEq(vault.reserveAssets(), 0, "testCheckRatio 3.0");
+        assertEq(vault.totalAssets(), 80, "testCheckRatio 3.1");
+
+        vault.checkRatio();
+
+        assertEq(vault.reserveAssets(), 16, "testCheckRatio 3.2");
+        assertEq(vault.totalAssets(), 80, "testCheckRatio 3.3");
+
+        // Situation 4
+        underlying.mint(address(vault), 20);
+
+        assertEq(vault.reserveAssets(), 36, "testCheckRatio 4.0");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 4.1");
+
+        vault.checkRatio();
+
+        assertEq(vault.reserveAssets(), 20, "testCheckRatio 4.2");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 4.3");
+
+        // Situation 5
+        vault.checkRatio();
+
+        assertEq(vault.reserveAssets(), 20, "testCheckRatio 5.2");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 5.3");
+
+        // Situation 6
+        vault.transferToAave(5);
+
+        assertEq(vault.reserveAssets(), 15, "testCheckRatio 6.0");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 6.1");
+
+        vault.checkRatio();
+
+        assertEq(vault.reserveAssets(), 15, "testCheckRatio 6.2");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 6.3");
+
+        // Situation 7
+        vault.transferToAave(1);
+
+        assertEq(vault.reserveAssets(), 14, "testCheckRatio 7.0");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 7.1");
+
+        vault.checkRatio();
+
+        assertEq(vault.reserveAssets(), 20, "testCheckRatio 7.2");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 7.3");
+
+        // Situation 8
+        vault.withdrawFromAave(5);
+
+        assertEq(vault.reserveAssets(), 25, "testCheckRatio 8.0");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 8.1");
+
+        vault.checkRatio();
+
+        assertEq(vault.reserveAssets(), 25, "testCheckRatio 8.2");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 8.3");
+
+        // Situation 9
+        vault.withdrawFromAave(1);
+
+        assertEq(vault.reserveAssets(), 26, "testCheckRatio 9.0");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 9.1");
+
+        vault.checkRatio();
+
+        assertEq(vault.reserveAssets(), 20, "testCheckRatio 9.2");
+        assertEq(vault.totalAssets(), 100, "testCheckRatio 9.3");
+
+        // Cleanup
+        vault.withdrawFromAave(80);
+        vault.burnUsdc(100);
+    }
+    // deposit and withdraw functions simply call solmate's deposit and withdraw
+    // and then check ratio, so no need to test ArborVault's deposit and withdraw
+
+    // 4 logs
+    function testPreviewRedeem() public {
+        // 2 situations:
+        // 1. Nothing in vault: reserveAssets() is limiting factor
+        // 2. Some USDC in vault: reserveAssets() is sometimes limiting factor
+
+        Person alice = new Person();
+        address aliceAddress = address(alice);
+
+        // Situation 1
+        assertEq(vault.previewRedeem(0), 0, "testPreviewRedeem 1.0");
+        assertEq(vault.previewRedeem(1), 0, "testPreviewRedeem 1.1");
+        assertEq(vault.previewRedeem(2), 0, "testPreviewRedeem 1.1");
+
+        // Situation 2
+        underlying.mint(address(vault), 1);
+        vault.mintFreeShares(aliceAddress, 1);
+
+        assertEq(vault.totalAssets(), 1, "testPreviewRedeem totalAssets");
+        assertEq(vault.totalSupply(), 1, "testPreviewRedeem totalSupply");
+        assertEq(vault.convertToAssets(1), 1, "testPreviewRedeem 2.");
+
+        assertEq(vault.previewRedeem(0), 0, "testPreviewRedeem 2.0");
+        assertEq(vault.previewRedeem(1), 1, "testPreviewRedeem 2.1");
+        assertEq(vault.previewRedeem(2), 1, "testPreviewRedeem 2.2");
+
+        // Cleanup
+        vault.burnUsdc(1);
+        vault.burnShares(aliceAddress, 1);
+
+        assertEq(vault.totalAssets(), 0, "testPreviewRedeem totalAssets");
+        assertEq(vault.totalSupply(), 0, "testPreviewRedeem totalSupply");
+    }
 }

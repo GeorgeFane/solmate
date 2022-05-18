@@ -52,6 +52,7 @@ contract ArborVault is ERC4626 {
         return reserveAssets() + collateralAssets();
     }
 
+    // quoted in shares
     function previewWithdraw(uint256 assets) public view override returns (uint256) {
         uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
         uint original_return = supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
@@ -59,19 +60,24 @@ contract ArborVault is ERC4626 {
         return assets < reserveAssets() ? original_return : reserveAssets();
     }
 
+    // quoted in assets
     function previewRedeem(uint256 shares) public view override returns (uint256) {
-        return previewWithdraw(convertToAssets(shares));
+        return min(convertToAssets(shares), reserveAssets());
     }
 
     /*//////////////////////////////////////////////////////////////
                         DEPOSIT/WITHDRAWAL LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function checkRatio() internal {
-
-        uint current_reserve = reserveAssets();
+    function checkRatio() public {
         uint total_usdc = totalAssets();
 
+        // avoid divide by 0
+        if (total_usdc == 0) {
+            return;
+        }
+
+        uint current_reserve = reserveAssets();
         uint percent_reserve = current_reserve * 100 / total_usdc;
 
         // want reserve ratio to be 20%
@@ -94,6 +100,7 @@ contract ArborVault is ERC4626 {
     }
 
     function withdraw(uint assets) public {
+        require(assets < maxWithdraw(msg.sender), "Can't withdraw more than your max");
         withdraw(assets, msg.sender, msg.sender);
 
         checkRatio();
