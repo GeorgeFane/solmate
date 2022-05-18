@@ -70,12 +70,12 @@ contract ArborVaultTest is DSTest {
     // and convertToShares is provided by solmate,
     // so no need to test maxMint()
 
-    // 2 logs: Transfer events for mint and burn
+    // 13 logs
     function testMaxMint() public {
         // 2 situations:
         // 1. Vault and AAVE both empty, 1 USDC = 1 share
         // 2. Vault and AAVE not empty, 1 USDC = 1 share
-        // 2. Vault and AAVE not empty, 2 USDC = 1 share
+        // 3. Vault and AAVE not empty, 2 USDC = 1 share
 
         Person alice = new Person();
         address aliceAddress = address(alice);
@@ -102,15 +102,35 @@ contract ArborVaultTest is DSTest {
 
         underlying.mint(aliceAddress, 1);
         // alice has 1 USDC
-        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 2.1");
+        assertEq(vault.maxMint(aliceAddress), 1, "testMaxMint 2.1");
 
         underlying.mint(aliceAddress, 1);
         // alice has 2 USDC
-        assertEq(vault.maxMint(aliceAddress), 1, "testMaxMint 2.2");
+        assertEq(vault.maxMint(aliceAddress), 2, "testMaxMint 2.2");
+
+        alice.burnUsdc(2);
+
+        // Situation 3
+        underlying.mint(address(vault), 1);
+
+        assertEq(vault.totalAssets(), 2, "testMaxMint totalAssets");
+        assertEq(vault.totalSupply(), 1, "testMaxMint totalSupply");
+
+        assertEq(vault.convertToAssets(1), 2, "testMaxMint 3.");
+
+        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 3.0");
+
+        underlying.mint(aliceAddress, 1);
+        // alice has 1 USDC
+        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 3.1");
+
+        underlying.mint(aliceAddress, 1);
+        // alice has 2 USDC
+        assertEq(vault.maxMint(aliceAddress), 1, "testMaxMint 3.2");
 
         // Cleanup
         alice.burnUsdc(2);
-        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 2.3");
+        assertEq(vault.maxMint(aliceAddress), 0, "testMaxMint 3.3");
 
         vault.burnShares(aliceAddress, 1);
         vault.burnUsdc(2);
@@ -118,9 +138,6 @@ contract ArborVaultTest is DSTest {
         assertEq(vault.totalAssets(), 0, "testMaxMint totalAssets");
         assertEq(vault.totalSupply(), 0, "testMaxMint totalSupply");
     }
-    // maxMint() is convertToShares(maxDeposit()),
-    // and convertToShares is provided by solmate,
-    // so no need to test maxMint()
 
     // 17 logs
     function testReserveAssets() public {
@@ -378,5 +395,39 @@ contract ArborVaultTest is DSTest {
 
         assertEq(vault.totalAssets(), 0, "testPreviewRedeem totalAssets");
         assertEq(vault.totalSupply(), 0, "testPreviewRedeem totalSupply");
+    }
+
+    // 4 logs
+    function testPreviewWithdraw() public {
+        // 2 situations:
+        // 1. Nothing in vault: reserveAssets() is limiting factor
+        // 2. Some USDC in vault: reserveAssets() is sometimes limiting factor
+
+        Person alice = new Person();
+        address aliceAddress = address(alice);
+
+        // Situation 1
+        assertEq(vault.previewWithdraw(0), 0, "testPreviewWithdraw 1.0");
+        assertEq(vault.previewWithdraw(1), 0, "testPreviewWithdraw 1.1");
+        assertEq(vault.previewWithdraw(2), 0, "testPreviewWithdraw 1.1");
+
+        // Situation 2
+        underlying.mint(address(vault), 1);
+        vault.mintFreeShares(aliceAddress, 1);
+
+        assertEq(vault.totalAssets(), 1, "testPreviewWithdraw totalAssets");
+        assertEq(vault.totalSupply(), 1, "testPreviewWithdraw totalSupply");
+        assertEq(vault.convertToAssets(1), 1, "testPreviewWithdraw 2.");
+
+        assertEq(vault.previewWithdraw(0), 0, "testPreviewWithdraw 2.0");
+        assertEq(vault.previewWithdraw(1), 1, "testPreviewWithdraw 2.1");
+        assertEq(vault.previewWithdraw(2), 1, "testPreviewWithdraw 2.2");
+
+        // Cleanup
+        vault.burnUsdc(1);
+        vault.burnShares(aliceAddress, 1);
+
+        assertEq(vault.totalAssets(), 0, "testPreviewWithdraw totalAssets");
+        assertEq(vault.totalSupply(), 0, "testPreviewWithdraw totalSupply");
     }
 }

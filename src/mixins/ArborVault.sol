@@ -56,8 +56,7 @@ contract ArborVault is ERC4626 {
     function previewWithdraw(uint256 assets) public view override returns (uint256) {
         uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
         uint original_return = supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
-
-        return assets < reserveAssets() ? original_return : reserveAssets();
+        return min(original_return, convertToShares(reserveAssets()));
     }
 
     // quoted in assets

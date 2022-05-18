@@ -15,6 +15,8 @@ contract Contract is ArborVaultTest() {}
 
     - The code size if very large, and these options prevent your computer from freezing and Remix from refusing to deploy.
 
+    - In my final draft of the test file, it was too large, so I commented out a test function that I knew worked in order to run the others.
+
 3. Go to Remix's "Deploy and run transactions" tab and change the "ENVIRONMENT" dropdown to "Injected Web3". Make sure your Metamask is switched to Avalanche C-Chain Fuji ([instructions](https://docs.avax.network/quickstart/fuji-workflow/#set-up-fuji-network-on-metamask-optional)) and has test AVAX ([faucet](https://faucet.avax-test.network/)).
 
 4. Run test functions in any order
