@@ -99,7 +99,7 @@ contract ArborVault is ERC4626 {
     }
 
     function withdraw(uint assets) public {
-        require(assets < maxWithdraw(msg.sender), "Can't withdraw more than your max");
+        require(assets <= maxWithdraw(msg.sender), "Can't withdraw more than your max");
         withdraw(assets, msg.sender, msg.sender);
 
         checkRatio();
