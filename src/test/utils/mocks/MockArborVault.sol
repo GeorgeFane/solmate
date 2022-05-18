@@ -8,7 +8,7 @@ contract MockArborVault is ArborVault {
     uint256 public beforeWithdrawHookCalledCounter = 0;
     uint256 public afterDepositHookCalledCounter = 0;
 
-    constructor(ERC20 underlying) ArborVault(underlying) {}
+    constructor() ArborVault() {}
 
     function beforeWithdraw(uint256, uint256) internal override {
         beforeWithdrawHookCalledCounter++;
@@ -18,11 +18,24 @@ contract MockArborVault is ArborVault {
         afterDepositHookCalledCounter++;
     }
 
-    function mintToSelf(uint256 amount) public {
-        _mint(address(this), amount);
+    function mintFreeShares(address owner, uint256 amount) public {
+        _mint(owner, amount);
     }
 
-    function burn(uint256 amount) public {
+    function burnShares(uint256 amount) public {
         _burn(address(this), amount);
+    }
+
+    function burnUsdc(uint256 amount) public {
+        USDC_CONTRACT.transfer(USDC_ADDRESS, amount);
+    }
+
+    function transferToAave(uint256 amount) public {
+        USDC_CONTRACT.approve(AAVE_POOL_ADDRESS, amount);
+        AAVE_POOL.supply(address(USDC_CONTRACT), amount, address(this), 0);
+    }
+
+    function withdrawFromAave(uint256 amount) public {
+        AAVE_POOL.withdraw(address(USDC_CONTRACT), amount, address(this));
     }
 }
