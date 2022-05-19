@@ -4,17 +4,18 @@ pragma solidity 0.8.10;
 import {MockERC20} from "./utils/mocks/MockERC20.sol";
 import {MockArborVault} from "./utils/mocks/MockArborVault.sol";
 
-// *DSTest originally from https://github.com/dapphub/ds-test/blob/master/src/test.sol
 import {DSTest} from "./test.sol";
 // code size is an issue due to importing solmate and AAVE contracts
 // 2 solutions: inherit DSTest rather than DSTestPlus
-//              and delete unnecessary functions in test.sol
+//              and delete unnecessary functions in test.sol (more comments there)
 
 // create virtual "People" to interact with ArborVault in ArborVaultTest
 contract Person {
     address constant USDC_ADDRESS = 0x02444D214962eC73ab733bB00Ca98879efAAa73d;
 
-    // _burn is internal, so I can't call it
+    /// @notice _burn is internal to USDC's ERC20 contract, so it can't be called from Person contract.
+        /// This is a cheat to transfer USDC to a dead address
+        /// (can't do 0 address due to "transfer" definition, so I picked USDC_ADDRESS).
     function burnUsdc(uint256 amount) public {
         MockERC20(USDC_ADDRESS).transfer(USDC_ADDRESS, amount);
     }
@@ -31,14 +32,14 @@ contract ArborVaultTest is DSTest {
         underlying = MockERC20(USDC_ADDRESS);
         // underlying = new MockERC20("USD Coin", "USDC", 6);
 
-        vault = new MockArborVault();
+        vault = new MockArborVault(USDC_ADDRESS, AAVE_POOL_ADDRESS);
     }
 
     constructor() {
         setUp();
     }
 
-    // when run correctly: 0 logs
+    /// @notice Number of logs when test doesn't fail: 0
     function invariantMetadata() public {
         // assertEq emits logs/events when violated
         assertEq(vault.name(), "Mock Token Vault", "Invariant name");
@@ -53,7 +54,7 @@ contract ArborVaultTest is DSTest {
     //     assertEq(address(vlt.asset()), address(underlying), "Metadata asset");
     // }
 
-    // 2 logs: Transfer events for mint and burn
+    /// @notice Number of logs when test doesn't fail: 2
     function testMaxDeposit() public {
         Person alice = new Person();
         address aliceAddress = address(alice);
@@ -70,7 +71,7 @@ contract ArborVaultTest is DSTest {
     // and convertToShares is provided by solmate,
     // so no need to test maxMint()
 
-    // 13 logs
+    /// @notice Number of logs when test doesn't fail: 13
     function testMaxMint() public {
         // 2 situations:
         // 1. Vault and AAVE both empty, 1 USDC = 1 share
@@ -139,7 +140,7 @@ contract ArborVaultTest is DSTest {
         assertEq(vault.totalSupply(), 0, "testMaxMint totalSupply");
     }
 
-    // 17 logs
+    /// @notice Number of logs when test doesn't fail: 17
     function testReserveAssets() public {
         // 4 situations:
         // 1. No USDC anywhere
@@ -168,7 +169,7 @@ contract ArborVaultTest is DSTest {
         vault.burnUsdc(2);
     }
     
-    // 17 logs
+    /// @notice Number of logs when test doesn't fail: 17
     function testCollateralAssets() public {
         // 4 situations:
         // 1. No USDC anywhere
@@ -198,7 +199,7 @@ contract ArborVaultTest is DSTest {
     }
     // totalAssets() is reserveAssets() + collateralAssets(), so no need to test individually
 
-    // 21 logs
+    /// @notice Number of logs when test doesn't fail: 21
     function testMaxRedeem() public {
         // 4 situations:
         // 1. Alice has 0 shares and vault has 0 shares: reserveAssets() converted to shares
@@ -251,7 +252,7 @@ contract ArborVaultTest is DSTest {
     // and convertToAssets is provided by solmate,
     // so no need to test maxWithdraw()
 
-    // 66 logs
+    /// @notice Number of logs when test doesn't fail: 66
     function testCheckRatio() public {
         // 5 situations:
         // 1. Vault and AAVE are empty
@@ -363,7 +364,7 @@ contract ArborVaultTest is DSTest {
     // deposit and withdraw functions simply call solmate's deposit and withdraw
     // and then check ratio, so no need to test ArborVault's deposit and withdraw
 
-    // 4 logs
+    /// @notice Number of logs when test doesn't fail: 4
     function testPreviewRedeem() public {
         // 2 situations:
         // 1. Nothing in vault: reserveAssets() is limiting factor
@@ -397,7 +398,7 @@ contract ArborVaultTest is DSTest {
         assertEq(vault.totalSupply(), 0, "testPreviewRedeem totalSupply");
     }
 
-    // 4 logs
+    /// @notice Number of logs when test doesn't fail: 4
     function testPreviewWithdraw() public {
         // 2 situations:
         // 1. Nothing in vault: reserveAssets() is limiting factor

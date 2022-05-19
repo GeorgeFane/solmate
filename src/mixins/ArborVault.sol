@@ -6,7 +6,7 @@ import {SafeTransferLib} from "../utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "../utils/FixedPointMathLib.sol";
 
 import {ERC4626} from "./ERC4626.sol";
-import {Pool} from "https://github.com/aave/aave-v3-core/blob/master/contracts/protocol/pool/Pool.sol";
+import {Pool} from "@aave/core-v3@1.13.1/contracts/protocol/pool/Pool.sol";
 
 contract ArborVault is ERC4626 {
     using SafeTransferLib for ERC20;
@@ -16,25 +16,35 @@ contract ArborVault is ERC4626 {
                                IMMUTABLES
     //////////////////////////////////////////////////////////////*/
 
-    address public constant USDC_ADDRESS = 0x02444D214962eC73ab733bB00Ca98879efAAa73d;
-    ERC20 constant USDC_CONTRACT = ERC20(USDC_ADDRESS);
-    // ERC20 public immutable USDC_CONTRACT;
+    address immutable USDC_ADDRESS;
+    ERC20 immutable USDC_CONTRACT;
 
-    address public constant AAVE_POOL_ADDRESS = 0xC4744c984975ab7d41e0dF4B37E048Ef8006115E;
-    Pool constant AAVE_POOL = Pool(AAVE_POOL_ADDRESS);
+    address immutable AAVE_POOL_ADDRESS;
+    Pool immutable AAVE_POOL;
 
-    constructor() ERC4626(USDC_CONTRACT, "Mock Token Vault", "vwTKN") {}
+    constructor(address USDC_ADDRESS_, address AAVE_POOL_ADDRESS_)
+        ERC4626(ERC20(USDC_ADDRESS_), "Mock Token Vault", "vwTKN")
+    {
+        USDC_ADDRESS = USDC_ADDRESS_;
+        USDC_CONTRACT = ERC20(USDC_ADDRESS);
+
+        AAVE_POOL_ADDRESS = AAVE_POOL_ADDRESS_;
+        AAVE_POOL = Pool(AAVE_POOL_ADDRESS);
+    }
 
     /*//////////////////////////////////////////////////////////////
                             ACCOUNTING LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    // ~20% of deposited USDC held in vault
+    /// @notice The contract holds ~20% of the deposited asset directly instead of in the vault
+        /// which likely covers a user's withdrawal needs for a single transaction
     function reserveAssets() public view returns (uint256) {
         return USDC_CONTRACT.balanceOf(address(this));
     }
 
-    // ~80% of deposited USDC supplied to AAVE
+    /// @notice ~80% of deposited USDC supplied to AAVE to earn interest
+    /// @dev AAVE adds two additional decimal places to totalCollateralBase
+        /// (8 decimals for USDC rather than 6). Not sure why, but dividing by 100 corrects this.
     function collateralAssets() public view returns (uint256) {
         (
             uint256 totalCollateralBase,
@@ -52,14 +62,14 @@ contract ArborVault is ERC4626 {
         return reserveAssets() + collateralAssets();
     }
 
-    // quoted in shares
+    /// @notice Quoted in shares
     function previewWithdraw(uint256 assets) public view override returns (uint256) {
         uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
         uint original_return = supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
         return min(original_return, convertToShares(reserveAssets()));
     }
 
-    // quoted in assets
+    /// @notice Quoted in assets
     function previewRedeem(uint256 shares) public view override returns (uint256) {
         return min(convertToAssets(shares), reserveAssets());
     }
@@ -109,12 +119,12 @@ contract ArborVault is ERC4626 {
                      DEPOSIT/WITHDRAWAL LIMIT LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    // quoted in usdc
+    /// @notice Quoted in assets
     function maxDeposit(address owner) public view override returns (uint256) {
         return USDC_CONTRACT.balanceOf(owner);
     }
 
-    // quoted in shares
+    /// @notice Quoted in shares
     function maxMint(address owner) public view override returns (uint256) {
         return convertToShares(maxDeposit(owner));
     }
@@ -123,12 +133,12 @@ contract ArborVault is ERC4626 {
         return x < y ? x : y;
     }
 
-    // quoted in shares
+    /// @notice Quoted in shares
     function maxRedeem(address owner) public view override returns (uint256) {
         return min(balanceOf[owner], convertToShares(reserveAssets()));
     }
 
-    // quoted in usdc
+    /// @notice Quoted in assets
     function maxWithdraw(address owner) public view override returns (uint256) {
         return convertToAssets(maxRedeem(owner));
     }
