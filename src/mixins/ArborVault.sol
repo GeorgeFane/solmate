@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity >=0.8.0;
+pragma solidity 0.8.10;
 
 import {ERC20} from "../tokens/ERC20.sol";
 import {SafeTransferLib} from "../utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "../utils/FixedPointMathLib.sol";
 
 import {ERC4626} from "./ERC4626.sol";
-import {Pool} from "@aave/core-v3@1.13.1/contracts/protocol/pool/Pool.sol";
+import {IPool} from "/workspace/solmate/node_modules/@aave/core-v3/contracts/interfaces/IPool.sol";
 
 contract ArborVault is ERC4626 {
     using SafeTransferLib for ERC20;
@@ -20,7 +20,7 @@ contract ArborVault is ERC4626 {
     ERC20 immutable USDC_CONTRACT;
 
     address immutable AAVE_POOL_ADDRESS;
-    Pool immutable AAVE_POOL;
+    IPool immutable AAVE_POOL;
 
     constructor(address USDC_ADDRESS_, address AAVE_POOL_ADDRESS_)
         ERC4626(ERC20(USDC_ADDRESS_), "Mock Token Vault", "vwTKN")
@@ -29,7 +29,7 @@ contract ArborVault is ERC4626 {
         USDC_CONTRACT = ERC20(USDC_ADDRESS);
 
         AAVE_POOL_ADDRESS = AAVE_POOL_ADDRESS_;
-        AAVE_POOL = Pool(AAVE_POOL_ADDRESS);
+        AAVE_POOL = IPool(AAVE_POOL_ADDRESS);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -56,6 +56,19 @@ contract ArborVault is ERC4626 {
         ) = AAVE_POOL.getUserAccountData(address(this));
 
         return totalCollateralBase / 100;
+    }
+
+    function rawCollateralAssets() public view returns (uint256) {
+        (
+            uint256 totalCollateralBase,
+            uint256 totalDebtBase,
+            uint256 availableBorrowsBase,
+            uint256 currentLiquidationThreshold,
+            uint256 ltv,
+            uint256 healthFactor
+        ) = AAVE_POOL.getUserAccountData(address(this));
+
+        return totalCollateralBase;
     }
 
     function totalAssets() public view override returns (uint256) {
@@ -109,7 +122,7 @@ contract ArborVault is ERC4626 {
     }
 
     function withdraw(uint assets) public {
-        require(assets <= maxWithdraw(msg.sender), "Can't withdraw more than your max");
+        require(assets < maxWithdraw(msg.sender), "Can't withdraw more than your max");
         withdraw(assets, msg.sender, msg.sender);
 
         checkRatio();

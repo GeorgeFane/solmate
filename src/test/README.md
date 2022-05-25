@@ -1,24 +1,21 @@
 # How to Run ArborVault Tests
 
-1. Create a new file in Remix (remix.ethereum.org) and paste this code:
+1. Clone this repo and `cd solmate`
 
-```
-// SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity 0.8.10;
+2. Install Foundry in a terminal: `curl -L https://foundry.paradigm.xyz | bash`
 
-import "https://github.com/arbor-bounty/solmate/blob/main/src/test/ArborVault.t.sol";
+    - Above is for Linux, here are other instructions: [https://mirror.xyz/crisgarner.eth/BhQzl33tthkJJ3Oh2ehAD_2FXGGlMupKlrUUcDk0ALA](https://mirror.xyz/crisgarner.eth/BhQzl33tthkJJ3Oh2ehAD_2FXGGlMupKlrUUcDk0ALA)
 
-contract Contract is ArborVaultTest() {}
-```
+3. Open a new terminal and run `foundryup`
 
-2. Go to Remix's "Solidity compiler" tab and make sure "Auto compile" is off and "Enable optimization" is on, with the number input next to it, runs, set to 1.
+4. In a terminal, run tests with forked Rinkeby: `forge test --fork-url https://rinkeby.infura.io/v3/02be7a3654c84c44a776f81558798c6b -vv`
 
-    - The code size if very large, and these options prevent your computer from freezing and Remix from refusing to deploy.
+    - You can use my Infura endpoint, or your own
 
-    - In my final draft of the test file, it was too large, so I commented out a test function that I knew worked in order to run the others.
+# Potential Bug with Pool.withdraw() and Pool.supply()
 
-3. Go to Remix's "Deploy and run transactions" tab and change the "ENVIRONMENT" dropdown to "Injected Web3". Make sure your Metamask is switched to Avalanche C-Chain Fuji ([instructions](https://docs.avax.network/quickstart/fuji-workflow/#set-up-fuji-network-on-metamask-optional)) and has test AVAX ([faucet](https://faucet.avax-test.network/)).
+Found a minor bug, probably a floating point issue.
 
-4. Run test functions in any order
+In testWithdraw() in ArborVault.t.sol, the 4626 vault can start with 80 USDC, supply all of it to AAVE, and end up withdrawing 81 USDC. Tha vault can also start with 800 USDC and end with 801 USDC.
 
-    - You can view the test code in Remix's file explorer: /.deps/github/arbor-bounty/solmate/src/test/ArborVault.t.sol
+A similar issue is shown in testSupply(), where the vault is given 100 USDC total but ends with only 99.

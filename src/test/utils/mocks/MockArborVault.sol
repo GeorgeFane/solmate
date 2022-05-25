@@ -36,7 +36,7 @@ contract MockArborVault is ArborVault {
         USDC_CONTRACT.transfer(USDC_ADDRESS, amount);
     }
 
-    function transferToAave(uint256 amount) public {
+    function supplyToAave(uint256 amount) public {
         USDC_CONTRACT.approve(AAVE_POOL_ADDRESS, amount);
         AAVE_POOL.supply(address(USDC_CONTRACT), amount, address(this), 0);
     }

@@ -11,7 +11,7 @@ import {DSTest} from "./test.sol";
 
 // create virtual "People" to interact with ArborVault in ArborVaultTest
 contract Person {
-    address constant USDC_ADDRESS = 0x02444D214962eC73ab733bB00Ca98879efAAa73d;
+    address constant USDC_ADDRESS = 0x5B8B635c2665791cf62fe429cB149EaB42A3cEd8;
 
     /// @notice _burn is internal to USDC's ERC20 contract, so it can't be called from Person contract.
         /// This is a cheat to transfer USDC to a dead address
@@ -22,11 +22,87 @@ contract Person {
 }
 
 contract ArborVaultTest is DSTest {
-    address constant USDC_ADDRESS = 0x02444D214962eC73ab733bB00Ca98879efAAa73d;
-    address constant AAVE_POOL_ADDRESS = 0xC4744c984975ab7d41e0dF4B37E048Ef8006115E;
+    address constant USDC_ADDRESS = 0x5B8B635c2665791cf62fe429cB149EaB42A3cEd8;
+    address constant AAVE_POOL_ADDRESS = 0x3561c45840e2681495ACCa3c50Ef4dAe330c94F8;
 
     MockERC20 underlying;
     MockArborVault vault;
+
+    /// @notice Shows floating point issue with Pool.withdraw():
+        /// Allows vault to take 1 more USDC than it should
+    function testWithdraw() public {
+        underlying.mint(address(vault), 80);
+        vault.supplyToAave(80);
+
+        vault.withdrawFromAave(16);
+        assertEq(vault.reserveAssets(), 16, "testWithdraw 1.1");
+        assertEq(vault.collateralAssets(), 65, "testWithdraw 1.2");
+        assertEq(vault.totalAssets(), 81, "testWithdraw 1.3");
+
+        vault.withdrawFromAave(65);
+        assertEq(vault.reserveAssets(), 81, "testWithdraw 1.4");
+
+        vault.burnUsdc(81);
+        assertEq(vault.totalAssets(), 0, "testWithdraw 1.5");
+
+        // The good thing is that AAVE might only be off by 1 even at larger amounts:
+        underlying.mint(address(vault), 800);
+        vault.supplyToAave(800);
+        vault.withdrawFromAave(160);
+
+        assertEq(vault.reserveAssets(), 160, "testWithdraw 2.1");
+        assertEq(vault.collateralAssets(), 641, "testWithdraw 2.2");
+        assertEq(vault.totalAssets(), 801, "testWithdraw 2.3");
+
+        vault.withdrawFromAave(641);
+        assertEq(vault.reserveAssets(), 801, "testWithdraw 2.4");
+
+        vault.burnUsdc(801);
+        assertEq(vault.totalAssets(), 0, "testWithdraw 2.5");
+
+        // This bug doesn't happen with some numbers
+        underlying.mint(address(vault), 100);
+        vault.supplyToAave(100);
+        vault.withdrawFromAave(20);
+
+        assertEq(vault.reserveAssets(), 20, "testWithdraw 2.1");
+        assertEq(vault.collateralAssets(), 80, "testWithdraw 2.2");
+        assertEq(vault.totalAssets(), 100, "testWithdraw 2.3");
+
+        vault.withdrawFromAave(80);
+        assertEq(vault.reserveAssets(), 100, "testWithdraw 2.4");
+
+        vault.burnUsdc(100);
+        assertEq(vault.totalAssets(), 0, "testWithdraw 2.5");
+    }
+
+    /// @notice Shows floating point issue with Pool.supply():
+        /// Allows vault to take 1 less USDC than it should
+    function testSupply() public {
+        underlying.mint(address(vault), 80);
+        vault.supplyToAave(64);
+
+        assertEq(vault.reserveAssets(), 16, "testSupply 1.1");
+        assertEq(vault.collateralAssets(), 64, "testSupply 1.2");
+        assertEq(vault.totalAssets(), 80, "testSupply 1.3");
+
+        underlying.mint(address(vault), 20);
+
+        assertEq(vault.reserveAssets(), 36, "testSupply 1.1");
+        assertEq(vault.collateralAssets(), 64, "testSupply 1.2");
+        assertEq(vault.totalAssets(), 100, "testSupply 1.3");
+
+        vault.supplyToAave(16);
+
+        assertEq(vault.reserveAssets(), 20, "testSupply 1.1");
+        assertEq(vault.collateralAssets(), 79, "testSupply 1.2");
+        assertEq(vault.totalAssets(), 99, "testSupply 1.3");
+
+        vault.withdrawFromAave(79);
+        vault.burnUsdc(99);
+
+        assertEq(vault.totalAssets(), 0, "testSupply 1.3");
+    }
 
     function setUp() internal {
         underlying = MockERC20(USDC_ADDRESS);
@@ -156,7 +232,7 @@ contract ArborVaultTest is DSTest {
         assertEq(vault.reserveAssets(), 1, "testReserveAssets 2");
 
         // Situation 3
-        vault.transferToAave(1);
+        vault.supplyToAave(1);
         assertEq(vault.reserveAssets(), 0, "testReserveAssets 3");
 
         // Situation 4
@@ -185,7 +261,7 @@ contract ArborVaultTest is DSTest {
         assertEq(vault.collateralAssets(), 0, "testCollateralAssets 2");
 
         // Situation 3
-        vault.transferToAave(1);
+        vault.supplyToAave(1);
         assertEq(vault.collateralAssets(), 1, "testCollateralAssets 3");
 
         // Situation 4
@@ -234,7 +310,7 @@ contract ArborVaultTest is DSTest {
 
         // Situation 4
         // imitates reserve ratio, with 80% in AAVE
-        vault.transferToAave(8);
+        vault.supplyToAave(8);
         assertEq(vault.reserveAssets(), 2, "testMaxRedeem reserveAssets");
 
         assertEq(vault.convertToAssets(1), 1, "testMaxMint 4.");
@@ -275,91 +351,93 @@ contract ArborVaultTest is DSTest {
         assertEq(vault.totalAssets(), 0, "testCheckRatio 1.3");
 
         // Situation 2
-        underlying.mint(address(vault), 100);
-
-        assertEq(vault.reserveAssets(), 100, "testCheckRatio 2.0");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 2.1");
-
-        vault.checkRatio();
-
-        assertEq(vault.reserveAssets(), 20, "testCheckRatio 2.2");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 2.3");
-
-        // Situation 3
-        vault.burnUsdc(20);
-
-        assertEq(vault.reserveAssets(), 0, "testCheckRatio 3.0");
-        assertEq(vault.totalAssets(), 80, "testCheckRatio 3.1");
-
-        vault.checkRatio();
-
-        assertEq(vault.reserveAssets(), 16, "testCheckRatio 3.2");
-        assertEq(vault.totalAssets(), 80, "testCheckRatio 3.3");
-
-        // Situation 4
         underlying.mint(address(vault), 20);
 
-        assertEq(vault.reserveAssets(), 36, "testCheckRatio 4.0");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 4.1");
+        assertEq(vault.reserveAssets(), 20, "testCheckRatio 2.0");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 2.1");
 
         vault.checkRatio();
 
-        assertEq(vault.reserveAssets(), 20, "testCheckRatio 4.2");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 4.3");
+        assertEq(vault.reserveAssets(), 4, "testCheckRatio 2.2");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 2.3");
+
+        // Situation 3
+        vault.burnUsdc(4);
+
+        assertEq(vault.reserveAssets(), 0, "testCheckRatio 3.0");
+        assertEq(vault.totalAssets(), 16, "testCheckRatio 3.1");
+
+        vault.checkRatio();
+
+        // 16 / 5 = 3.2, rounds down to 3
+        assertEq(vault.reserveAssets(), 3, "testCheckRatio 3.2");
+        assertEq(vault.collateralAssets(), 13, "testCheckRatio 3.2 collateral");
+        assertEq(vault.totalAssets(), 16, "testCheckRatio 3.3");
+
+        // Situation 4
+        underlying.mint(address(vault), 4);
+
+        assertEq(vault.reserveAssets(), 7, "testCheckRatio 4.0");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 4.1");
+
+        vault.checkRatio();
+
+        assertEq(vault.reserveAssets(), 4, "testCheckRatio 4.2");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 4.3");
 
         // Situation 5
         vault.checkRatio();
 
-        assertEq(vault.reserveAssets(), 20, "testCheckRatio 5.2");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 5.3");
+        assertEq(vault.reserveAssets(), 4, "testCheckRatio 5.2");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 5.3");
 
         // Situation 6
-        vault.transferToAave(5);
+        vault.supplyToAave(1);
 
-        assertEq(vault.reserveAssets(), 15, "testCheckRatio 6.0");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 6.1");
+        assertEq(vault.reserveAssets(), 3, "testCheckRatio 6.0");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 6.1");
 
         vault.checkRatio();
 
-        assertEq(vault.reserveAssets(), 15, "testCheckRatio 6.2");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 6.3");
+        assertEq(vault.reserveAssets(), 3, "testCheckRatio 6.2");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 6.3");
 
         // Situation 7
-        vault.transferToAave(1);
+        vault.supplyToAave(1);
 
-        assertEq(vault.reserveAssets(), 14, "testCheckRatio 7.0");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 7.1");
+        assertEq(vault.reserveAssets(), 2, "testCheckRatio 7.0");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 7.1");
 
         vault.checkRatio();
 
-        assertEq(vault.reserveAssets(), 20, "testCheckRatio 7.2");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 7.3");
+        assertEq(vault.reserveAssets(), 4, "testCheckRatio 7.2");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 7.3");
 
         // Situation 8
-        vault.withdrawFromAave(5);
+        vault.withdrawFromAave(1);
 
-        assertEq(vault.reserveAssets(), 25, "testCheckRatio 8.0");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 8.1");
+        assertEq(vault.reserveAssets(), 5, "testCheckRatio 8.0");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 8.1");
 
         vault.checkRatio();
 
-        assertEq(vault.reserveAssets(), 25, "testCheckRatio 8.2");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 8.3");
+        assertEq(vault.reserveAssets(), 5, "testCheckRatio 8.2");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 8.3");
 
         // Situation 9
         vault.withdrawFromAave(1);
 
-        assertEq(vault.reserveAssets(), 26, "testCheckRatio 9.0");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 9.1");
+        assertEq(vault.reserveAssets(), 6, "testCheckRatio 9.0");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 9.1");
 
         vault.checkRatio();
 
-        assertEq(vault.reserveAssets(), 20, "testCheckRatio 9.2");
-        assertEq(vault.totalAssets(), 100, "testCheckRatio 9.3");
+        assertEq(vault.reserveAssets(), 4, "testCheckRatio 9.2");
+        assertEq(vault.totalAssets(), 20, "testCheckRatio 9.3");
 
         // Cleanup
-        vault.withdrawFromAave(80);
-        vault.burnUsdc(100);
+        vault.withdrawFromAave(16);
+        vault.burnUsdc(20);
     }
     // deposit and withdraw functions simply call solmate's deposit and withdraw
     // and then check ratio, so no need to test ArborVault's deposit and withdraw

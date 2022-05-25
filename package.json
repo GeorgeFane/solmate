@@ -16,5 +16,8 @@
   },
   "scripts": {
     "lint": "prettier --write **.sol"
+  },
+  "dependencies": {
+    "@aave/core-v3": "^1.13.1"
   }
 }
